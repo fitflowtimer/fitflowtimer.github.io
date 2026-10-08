@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Fit Flow Timer — Pro Athlete Stopwatch Suite</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter, Space Grotesk, and JetBrains Mono for tabular-nums readout -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            crimson: {
+              DEFAULT: '#C51D34',
+              hover: '#db223c',
+              dark: '#9e1528',
+              glow: 'rgba(197, 29, 52, 0.35)'
+            },
+            charcoal: {
+              DEFAULT: '#2E2E30',
+              deep: '#1E1E20',
+              card: '#262628',
+              elevated: '#363639'
+            },
+            neutralgray: {
+              DEFAULT: '#808080',
+              light: '#9e9e9e',
+              dark: '#525254'
+            },
+            offwhite: {
+              DEFAULT: '#F5F5F5',
+              muted: '#DCDCDC'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    :root {
+      --color-crimson: #C51D34;
+      --color-charcoal: #2E2E30;
+      --color-gray: #808080;
+      --color-offwhite: #F5F5F5;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: #2E2E30;
+      background-image:
+        radial-gradient(circle at 15% 0%, rgba(197, 29, 52, 0.16) 0%, transparent 45%),
+        radial-gradient(circle at 85% 100%, rgba(128, 128, 128, 0.12) 0%, transparent 50%),
+        linear-gradient(180deg, #232325 0%, #2E2E30 45%, #242426 100%);
+      color: #F5F5F5;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Subtle carbon grid texture overlay */
+    .bg-grid-pattern {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(245, 245, 245, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(245, 245, 245, 0.025) 1px, transparent 1px);
+    }
+
+    /* Strictly tabular numbers so digits never jitter at 60fps */
+    .timer-digits {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1, "zero" 1;
+      letter-spacing: -0.03em;
+    }
+
+    /* Athlete Card Styling & Left Accent Bar */
+    .athlete-card {
+      position: relative;
+      background: linear-gradient(145deg, rgba(54, 54, 57, 0.72) 0%, rgba(36, 36, 38, 0.92) 100%);
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      box-shadow: 0 14px 32px -10px rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(245, 245, 245, 0.07);
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+      overflow: hidden;
+    }
+
+    .athlete-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(128, 128, 128, 0.45);
+    }
+
+    /* State-specific left accent bars matching the prototype */
+    .athlete-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 6px;
+      background-color: #808080;
+      transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    /* RUNNING STATE */
+    .athlete-card.state-running {
+      border-color: rgba(197, 29, 52, 0.65);
+      box-shadow: 0 16px 36px -8px rgba(197, 29, 52, 0.22), inset 0 1px 0 0 rgba(245, 245, 245, 0.1);
+    }
+    .athlete-card.state-running::before {
+      background-color: #C51D34;
+      box-shadow: 0 0 16px #C51D34;
+    }
+
+    /* PAUSED STATE */
+    .athlete-card.state-paused {
+      border-color: rgba(245, 245, 245, 0.38);
+    }
+    .athlete-card.state-paused::before {
+      background-color: #F5F5F5;
+      box-shadow: 0 0 10px rgba(245, 245, 245, 0.35);
+    }
+
+    /* IDLE STATE */
+    .athlete-card.state-idle::before {
+      background-color: rgba(128, 128, 128, 0.45);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #232325;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #808080;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #C51D34;
+    }
+
+    /* Pulse ring for live indicator */
+    @keyframes pulseRed {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.35);
+        opacity: 0.45;
+      }
+    }
+    .pulse-dot {
+      animation: pulseRed 1.4s infinite ease-in-out;
+    }
+
+    /* Bottom Sheet Slide Animation */
+    .sheet-backdrop {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .sheet-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .bottom-sheet {
+      transform: translateY(105%);
+      transition: transform 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .sheet-backdrop.open .bottom-sheet {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+
+<body class="bg-grid-pattern font-sans antialiased selection:bg-crimson selection:text-offwhite flex flex-col min-h-screen">
+
+  <!-- Top Ambient Crimson Accent Bar -->
+  <div class="h-1 w-full bg-gradient-to-r from-[#2E2E30] via-[#C51D34] to-[#2E2E30]"></div>
+
+  <!-- Sticky Header -->
+  <header class="sticky top-0 z-30 backdrop-blur-xl bg-[#2E2E30]/85 border-b border-[#808080]/25">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+      
+      <!-- Brand Logo & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#C51D34] to-[#8f1224] flex items-center justify-center shadow-lg shadow-[#C51D34]/30 border border-[#F5F5F5]/15 shrink-0">
+          <!-- Stopwatch SVG Icon -->
+          <svg class="w-6 h-6 text-[#F5F5F5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="13" r="8"></circle>
+            <path d="M12 9v4l2.5 2.5"></path>
+            <path d="M5 3 2 6"></path>
+            <path d="m22 6-3-3"></path>
+            <path d="M10 2h4"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="font-display font-extrabold text-xl sm:text-2xl tracking-tight text-[#F5F5F5]">
+              Fit Flow <span class="text-[#C51D34]">Timer</span>
+            </h1>
+            <span id="liveActiveBadge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#C51D34]/20 text-[#F5F5F5] border border-[#C51D34]/50">
+              <span class="w-2 h-2 rounded-full bg-[#C51D34] pulse-dot"></span>
+              <span id="liveActiveCountText">0 Running</span>
+            </span>
+          </div>
+          <p class="text-xs text-[#808080] font-medium hidden sm:block">
+            Personalized Multi-Athlete Performance Stopwatches
+          </p>
+        </div>
+      </div>
+
+      <!-- Right Header Controls: Audio Toggle, Layout Switch, & "+ ADD ATHLETE" Button -->
+      <div class="flex items-center gap-2.5">
+        <!-- Tactile Sound Toggle Button -->
+        <button
+          id="soundToggleBtn"
+          type="button"
+          title="Toggle Trainer Audio Feedback"
+          class="p-2.5 rounded-xl bg-[#232325] hover:bg-[#363639] text-[#F5F5F5] border border-[#808080]/35 transition-all active:scale-95"
+          aria-label="Toggle Sound"
+        >
+          <svg id="soundOnIcon" class="w-5 h-5 text-[#F5F5F5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          </svg>
+          <svg id="soundOffIcon" class="w-5 h-5 text-[#808080] hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="23" y1="9" x2="17" y2="15"></line>
+            <line x1="17" y1="9" x2="23" y2="15"></line>
+          </svg>
+        </button>
+
+        <!-- View Mode Toggle (Mobile Stack vs Multi-Column Grid on larger screens) -->
+        <button
+          id="layoutToggleBtn"
+          type="button"
+          title="Toggle Compact Trainer Phone View / Full Grid View"
+          class="hidden md:flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#232325] hover:bg-[#363639] text-xs font-semibold text-[#F5F5F5] border border-[#808080]/35 transition-all active:scale-95"
+        >
+          <svg class="w-4 h-4 text-[#808080]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+          </svg>
+          <span id="layoutToggleText">Grid View</span>
+        </button>
+
+        <!-- Primary "+ ADD ATHLETE" Button (Matches Prototype Header Button) -->
+        <button
+          id="openAddModalBtn"
+          type="button"
+          class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-display font-bold text-xs sm:text-sm tracking-wider uppercase bg-[#232325] hover:bg-[#C51D34] text-[#F5F5F5] border border-[#808080]/60 hover:border-[#C51D34] shadow-md transition-all duration-200 active:scale-95 group"
+        >
+          <svg class="w-4 h-4 text-[#C51D34] group-hover:text-[#F5F5F5] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>ADD ATHLETE</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-5 pb-28">
+    
+    <!-- Trainer Command & Bulk Action Bar -->
+    <section aria-label="Trainer Controls" class="mb-6 bg-[#232325]/90 border border-[#808080]/25 rounded-2xl p-3.5 sm:p-4 shadow-xl backdrop-blur-md">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+        
+        <!-- Search & Filter Pills -->
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+          <!-- Search Athlete Input -->
+          <div class="relative flex-1 max-w-xs">
+            <svg class="w-4 h-4 text-[#808080] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              id="searchAthleteInput"
+              type="text"
+              placeholder="Filter athletes..."
+              class="w-full pl-9 pr-8 py-2 rounded-xl bg-[#2E2E30] border border-[#808080]/35 text-sm text-[#F5F5F5] placeholder-[#808080] focus:outline-none focus:border-[#C51D34] transition-colors"
+            />
+            <button
+              id="clearSearchBtn"
+              type="button"
+              class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-[#808080] hover:text-[#F5F5F5]"
+              aria-label="Clear search"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Status Filter Tabs -->
+          <div class="flex items-center gap-1.5 bg-[#2E2E30] p-1 rounded-xl border border-[#808080]/25 self-start">
+            <button type="button" data-filter="all" class="filter-tab px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#C51D34] text-[#F5F5F5] transition-all">
+              All (<span id="countAll">0</span>)
+            </button>
+            <button type="button" data-filter="running" class="filter-tab px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-[#808080] hover:text-[#F5F5F5] transition-all">
+              Running (<span id="countRunning">0</span>)
+            </button>
+            <button type="button" data-filter="paused" class="filter-tab px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-[#808080] hover:text-[#F5F5F5] transition-all">
+              Paused (<span id="countPaused">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Master Heat / Group Controls -->
+        <div class="flex flex-wrap items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-[#808080]/20">
+          <span class="text-[11px] font-bold uppercase tracking-widest text-[#808080] mr-1 hidden sm:inline">
+            Group Heat:
+          </span>
+          <button
+            id="startAllBtn"
+            type="button"
+            class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#C51D34] hover:bg-[#db223c] text-[#F5F5F5] shadow-sm shadow-[#C51D34]/30 transition-all active:scale-95"
+          >
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Start All
+          </button>
+          <button
+            id="pauseAllBtn"
+            type="button"
+            class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#2E2E30] hover:bg-[#363639] text-[#F5F5F5] border border-[#808080]/40 transition-all active:scale-95"
+          >
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            Pause All
+          </button>
+          <button
+            id="resetAllBtn"
+            type="button"
+            class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#2E2E30] hover:bg-[#363639] text-[#808080] hover:text-[#F5F5F5] border border-[#808080]/30 transition-all active:scale-95"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+              <path d="M3 3v5h5"></path>
+            </svg>
+            Reset All
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Athlete Timer Cards Container -->
+    <section aria-label="Athlete Timers">
+      <div id="athletesContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 transition-all">
+        <!-- Populated dynamically via JavaScript -->
+      </div>
+
+      <!-- Empty State when no athletes exist or match filter -->
+      <div id="emptyStateContainer" class="hidden rounded-3xl bg-[#232325]/80 border border-dashed border-[#808080]/40 p-10 text-center max-w-lg mx-auto my-8">
+        <div class="w-16 h-16 rounded-2xl bg-[#2E2E30] border border-[#808080]/30 flex items-center justify-center mx-auto mb-4 text-[#C51D34]">
+          <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <line x1="19" y1="8" x2="19" y2="14"></line>
+            <line x1="22" y1="11" x2="16" y2="11"></line>
+          </svg>
+        </div>
+        <h2 id="emptyStateTitle" class="font-display font-bold text-xl text-[#F5F5F5] mb-2">
+          No Athletes on the Floor
+        </h2>
+        <p id="emptyStateSubtitle" class="text-sm text-[#808080] mb-6">
+          Add an athlete by name to create their personalized high-precision stopwatch slot.
+        </p>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <button
+            id="emptyStateAddBtn"
+            type="button"
+            class="inline-flex items-center gap-2 px-5 py-3 rounded-xl font-display font-bold text-sm uppercase tracking-wider bg-[#C51D34] hover:bg-[#db223c] text-[#F5F5F5] shadow-lg shadow-[#C51D34]/30 transition-all active:scale-95"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add First Athlete
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Non-Intrusive Toast Banner (Supports Undo on Athlete Removal) -->
+  <div
+    id="toastContainer"
+    class="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 pointer-events-none transition-all duration-300 opacity-0 translate-y-4 w-[92%] max-w-md"
+    role="status"
+    aria-live="polite"
+  >
+    <div class="pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-[#232325] border border-[#808080]/50 shadow-2xl text-sm text-[#F5F5F5]">
+      <div class="flex items-center gap-2.5 truncate">
+        <span class="w-2.5 h-2.5 rounded-full bg-[#C51D34] shrink-0"></span>
+        <span id="toastMessage" class="font-medium truncate">Athlete slot updated</span>
+      </div>
+      <button
+        id="toastUndoBtn"
+        type="button"
+        class="hidden px-3 py-1 rounded-lg bg-[#C51D34] hover:bg-[#db223c] text-xs font-bold uppercase tracking-wider text-[#F5F5F5] shrink-0 transition-colors"
+      >
+        Undo
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom Sheet / Modal Drawer for "Add New Athlete" (Modeled after the prototype image) -->
+  <div
+    id="addAthleteBackdrop"
+    class="sheet-backdrop fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+    aria-hidden="true"
+  >
+    <div
+      class="bottom-sheet w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-[#2E2E30]/95 backdrop-blur-2xl border-t sm:border border-[#808080]/45 shadow-[0_-20px_50px_rgba(0,0,0,0.75)] p-6 sm:p-7"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="drawerTitle"
+    >
+      <!-- Top Drag Handle Pill (Just like the mobile prototype) -->
+      <div class="w-12 h-1.5 rounded-full bg-[#808080]/50 mx-auto mb-5"></div>
+
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="drawerTitle" class="font-display font-bold text-xl sm:text-2xl text-[#F5F5F5] tracking-tight">
+          Add New Athlete
+        </h2>
+        <span class="text-xs font-semibold uppercase tracking-wider text-[#808080]">
+          Instant Slot
+        </span>
+      </div>
+
+      <form id="addAthleteForm" class="space-y-4" novalidate>
+        <div>
+          <label for="athleteNameInput" class="sr-only">Athlete's Name</label>
+          <input
+            id="athleteNameInput"
+            type="text"
+            maxlength="36"
+            autocomplete="off"
+            placeholder="Athlete's Name (e.g. Alex)"
+            class="w-full px-4 py-4 rounded-2xl bg-[#232325] border border-[#808080]/55 text-[#F5F5F5] placeholder-[#808080] text-base sm:text-lg font-medium focus:outline-none focus:border-[#C51D34] focus:ring-2 focus:ring-[#C51D34]/30 transition-all"
+          />
+          <p id="nameErrorMsg" class="hidden text-xs font-semibold text-[#C51D34] mt-2 pl-1">
+            Please enter an athlete's name to create a timer slot.
+          </p>
+        </div>
+
+        <!-- Quick-Fill Suggestions for Fast Trainer Entry -->
+        <div class="flex items-center gap-2 flex-wrap pt-0.5">
+          <span class="text-xs text-[#808080] font-medium">Quick add:</span>
+          <button type="button" data-quick-name="Athlete 1" class="quick-name-chip text-xs px-2.5 py-1 rounded-lg bg-[#232325] hover:bg-[#363639] text-[#F5F5F5] border border-[#808080]/30 transition-colors">
+            + Athlete 1
+          </button>
+          <button type="button" data-quick-name="Athlete 2" class="quick-name-chip text-xs px-2.5 py-1 rounded-lg bg-[#232325] hover:bg-[#363639] text-[#F5F5F5] border border-[#808080]/30 transition-colors">
+            + Athlete 2
+          </button>
+        </div>
+
+        <!-- Action Row: Prominent "CREATE TIMER" button + Square "X" Close Button matching Prototype -->
+        <div class="flex items-center gap-3 pt-2">
+          <button
+            type="submit"
+            class="flex-1 py-4 px-6 rounded-2xl bg-[#C51D34] hover:bg-[#db223c] active:bg-[#9e1528] text-[#F5F5F5] font-display font-extrabold text-sm sm:text-base uppercase tracking-wider shadow-lg shadow-[#C51D34]/40 transition-all active:scale-[0.99]"
+          >
+            CREATE TIMER
+          </button>
+          <button
+            id="closeAddModalBtn"
+            type="button"
+            aria-label="Close Add Athlete Drawer"
+            class="w-14 h-14 rounded-2xl bg-[#232325] hover:bg-[#363639] text-[#F5F5F5] border border-[#808080]/55 flex items-center justify-center transition-all active:scale-95 shrink-0"
+          >
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </form>
+
+      <!-- Bottom Home Indicator Bar (Visual nod to the prototype sheet) -->
+      <div class="w-32 h-1 rounded-full bg-[#F5F5F5]/25 mx-auto mt-6 sm:hidden"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const STORAGE_KEY = 'fit_flow_timer_athletes_v1';
+      const LAYOUT_KEY = 'fit_flow_timer_layout_v1';
+      const SOUND_KEY = 'fit_flow_timer_sound_v1';
+
+      function getDefaultAthletes() {
+        return [];
+      }
+
+      // Application State
+      let athletes = [];
+      let currentFilter = 'all'; // 'all' | 'running' | 'paused'
+      let searchQuery = '';
+      let compactMobileLayout = false;
+      let soundEnabled = true;
+      let lastRemovedBackup = null;
+      let toastTimeoutId = null;
+
+      // Web Audio API Synthesizer for subtle pro-stopwatch tactile feedback
+      let audioCtx = null;
+      function playTactileTone(type) {
+        if (!soundEnabled) return;
+        try {
+          if (!audioCtx) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            audioCtx = new AudioContextClass();
+          }
+          if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          const now = audioCtx.currentTime;
+
+          if (type === 'start') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(660, now);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.07);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.085);
+          } else if (type === 'pause') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(520, now);
+            osc.frequency.exponentialRampToValueAtTime(360, now + 0.08);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.095);
+          } else if (type === 'reset') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(320, now);
+            gain.gain.setValueAtTime(0.06, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.065);
+          } else if (type === 'add') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(587.33, now);
+            osc.frequency.setValueAtTime(880, now + 0.06);
+            gain.gain.setValueAtTime(0.07, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.145);
+          }
+        } catch (err) {
+          // Ignore audio errors if blocked by browser autoplay policy
+        }
+      }
+
+      function loadState() {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              athletes = parsed;
+            } else {
+              athletes = getDefaultAthletes();
+            }
+          } else {
+            athletes = getDefaultAthletes();
+          }
+
+          const savedLayout = localStorage.getItem(LAYOUT_KEY);
+          if (savedLayout === 'compact') {
+            compactMobileLayout = true;
+          }
+
+          const savedSound = localStorage.getItem(SOUND_KEY);
+          if (savedSound !== null) {
+            soundEnabled = savedSound === 'true';
+          }
+        } catch (e) {
+          athletes = getDefaultAthletes();
+        }
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(athletes));
+        } catch (e) {
+          // Ignore storage quota errors
+        }
+      }
+
+      /**
+       * Computes total elapsed milliseconds for an athlete right now
+       */
+      function getTotalElapsedMs(athlete, nowEpoch = Date.now()) {
+        if (!athlete.isRunning || !athlete.lastStartEpoch) {
+          return athlete.elapsedMs;
+        }
+        return athlete.elapsedMs + Math.max(0, nowEpoch - athlete.lastStartEpoch);
+      }
+
+      /**
+       * Formats milliseconds into MM:SS.ms (hundredths of a second, e.g., 08:42.15)
+       * If hours > 0, prefixes HH:MM:SS.ms
+       */
+      function formatStopwatchParts(totalMs) {
+        const clamped = Math.max(0, Math.floor(totalMs));
+        const totalSeconds = Math.floor(clamped / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const centiseconds = Math.floor((clamped % 1000) / 10);
+
+        const mm = String(minutes).padStart(2, '0');
+        const ss = String(seconds).padStart(2, '0');
+        const cs = String(centiseconds).padStart(2, '0');
+
+        if (hours > 0) {
+          const hh = String(hours).padStart(2, '0');
+          return { main: `${hh}:${mm}:${ss}`, centi: `.${cs}` };
+        }
+        return { main: `${mm}:${ss}`, centi: `.${cs}` };
+      }
+
+      const athletesContainer = document.getElementById('athletesContainer');
+      const emptyStateContainer = document.getElementById('emptyStateContainer');
+      const emptyStateTitle = document.getElementById('emptyStateTitle');
+      const emptyStateSubtitle = document.getElementById('emptyStateSubtitle');
+      const liveActiveBadge = document.getElementById('liveActiveBadge');
+      const liveActiveCountText = document.getElementById('liveActiveCountText');
+      const countAllEl = document.getElementById('countAll');
+      const countRunningEl = document.getElementById('countRunning');
+      const countPausedEl = document.getElementById('countPaused');
+
+      const searchAthleteInput = document.getElementById('searchAthleteInput');
+      const clearSearchBtn = document.getElementById('clearSearchBtn');
+      const filterTabs = document.querySelectorAll('.filter-tab');
+
+      const openAddModalBtn = document.getElementById('openAddModalBtn');
+      const emptyStateAddBtn = document.getElementById('emptyStateAddBtn');
+      const restoreDemoBtn = document.getElementById('restoreDemoBtn');
+      const closeAddModalBtn = document.getElementById('closeAddModalBtn');
+      const addAthleteBackdrop = document.getElementById('addAthleteBackdrop');
+      const addAthleteForm = document.getElementById('addAthleteForm');
+      const athleteNameInput = document.getElementById('athleteNameInput');
+      const nameErrorMsg = document.getElementById('nameErrorMsg');
+
+      const startAllBtn = document.getElementById('startAllBtn');
+      const pauseAllBtn = document.getElementById('pauseAllBtn');
+      const resetAllBtn = document.getElementById('resetAllBtn');
+      const layoutToggleBtn = document.getElementById('layoutToggleBtn');
+      const layoutToggleText = document.getElementById('layoutToggleText');
+      const soundToggleBtn = document.getElementById('soundToggleBtn');
+      const soundOnIcon = document.getElementById('soundOnIcon');
+      const soundOffIcon = document.getElementById('soundOffIcon');
+
+      const toastContainer = document.getElementById('toastContainer');
+      const toastMessage = document.getElementById('toastMessage');
+      const toastUndoBtn = document.getElementById('toastUndoBtn');
+
+      function showToast(message, allowUndo = false) {
+        if (toastTimeoutId) clearTimeout(toastTimeoutId);
+        toastMessage.textContent = message;
+        if (allowUndo && lastRemovedBackup) {
+          toastUndoBtn.classList.remove('hidden');
+        } else {
+          toastUndoBtn.classList.add('hidden');
+        }
+        toastContainer.classList.remove('opacity-0', 'translate-y-4');
+        toastContainer.classList.add('opacity-100', 'translate-y-0');
+
+        toastTimeoutId = setTimeout(() => {
+          hideToast();
+        }, 4500);
+      }
+
+      function hideToast() {
+        toastContainer.classList.add('opacity-0', 'translate-y-4');
+        toastContainer.classList.remove('opacity-100', 'translate-y-0');
+      }
+
+      function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function getAthleteStateClass(athlete, totalMs) {
+        if (athlete.isRunning) return 'state-running';
+        if (totalMs > 0) return 'state-paused';
+        return 'state-idle';
+      }
+
+      function updateCountersAndBadges() {
+        const now = Date.now();
+        let runningCount = 0;
+        let pausedCount = 0;
+
+        athletes.forEach((a) => {
+          const total = getTotalElapsedMs(a, now);
+          if (a.isRunning) {
+            runningCount++;
+          } else if (total > 0) {
+            pausedCount++;
+          }
+        });
+
+        countAllEl.textContent = athletes.length;
+        countRunningEl.textContent = runningCount;
+        countPausedEl.textContent = pausedCount;
+
+        if (runningCount > 0) {
+          liveActiveCountText.textContent = `${runningCount} Running`;
+          liveActiveBadge.classList.remove('opacity-50');
+        } else {
+          liveActiveCountText.textContent = '0 Running';
+          liveActiveBadge.classList.add('opacity-50');
+        }
+      }
+
+      function getFilteredAthletes() {
+        const now = Date.now();
+        return athletes.filter((athlete) => {
+          const matchesSearch = athlete.name
+            .toLowerCase()
+            .includes(searchQuery.trim().toLowerCase());
+          if (!matchesSearch) return false;
+
+          const total = getTotalElapsedMs(athlete, now);
+          if (currentFilter === 'running') return athlete.isRunning;
+          if (currentFilter === 'paused') return !athlete.isRunning && total > 0;
+          return true;
+        });
+      }
+
+      function renderAthletesList() {
+        updateCountersAndBadges();
+        const filtered = getFilteredAthletes();
+
+        // Update layout classes (Phone Stack vs 2-Column Grid)
+        if (compactMobileLayout) {
+          athletesContainer.className = 'grid grid-cols-1 max-w-md mx-auto gap-4 transition-all';
+          layoutToggleText.textContent = 'Phone Stack';
+        } else {
+          athletesContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 transition-all';
+          layoutToggleText.textContent = 'Grid View';
+        }
+
+        if (filtered.length === 0) {
+          athletesContainer.innerHTML = '';
+          emptyStateContainer.classList.remove('hidden');
+          if (athletes.length === 0) {
+            emptyStateTitle.textContent = 'No Athletes on the Floor';
+            emptyStateSubtitle.textContent =
+              'Click "+ ADD ATHLETE" to create a personalized stopwatch slot for your first athlete.';
+            restoreDemoBtn.classList.remove('hidden');
+          } else {
+            emptyStateTitle.textContent = 'No Matching Athlete Slots';
+            emptyStateSubtitle.textContent =
+              'Try clearing your search query or switching the status filter tab above.';
+            restoreDemoBtn.classList.add('hidden');
+          }
+          return;
+        }
+
+        emptyStateContainer.classList.add('hidden');
+        const now = Date.now();
+
+        athletesContainer.innerHTML = filtered
+          .map((athlete) => {
+            const totalMs = getTotalElapsedMs(athlete, now);
+            const parts = formatStopwatchParts(totalMs);
+            const stateClass = getAthleteStateClass(athlete, totalMs);
+
+            // Color of the digital readout based on state (Strictly using palette colors)
+            let digitColorClass = 'text-[#808080]';
+            let statusBadgeHtml = `
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-[#232325] text-[#808080] border border-[#808080]/30">
+                READY
+              </span>
+            `;
+
+            if (athlete.isRunning) {
+              digitColorClass = 'text-[#F5F5F5] drop-shadow-[0_0_14px_rgba(197,29,52,0.55)]';
+              statusBadgeHtml = `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-[#C51D34]/20 text-[#F5F5F5] border border-[#C51D34]/60">
+                  <span class="w-1.5 h-1.5 rounded-full bg-[#C51D34] pulse-dot"></span>
+                  RUNNING
+                </span>
+              `;
+            } else if (totalMs > 0) {
+              digitColorClass = 'text-[#F5F5F5]';
+              statusBadgeHtml = `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-[#F5F5F5]/10 text-[#F5F5F5] border border-[#F5F5F5]/30">
+                  PAUSED
+                </span>
+              `;
+            }
+
+            // Start / Pause Toggle Button Markup
+            const startPauseBtnHtml = athlete.isRunning
+              ? `
+                <button
+                  type="button"
+                  data-action="toggle"
+                  data-id="${athlete.id}"
+                  class="toggle-btn flex-1 py-3.5 px-4 rounded-xl font-display font-extrabold text-sm sm:text-base uppercase tracking-wider flex items-center justify-center gap-2.5 bg-[#C51D34] hover:bg-[#db223c] text-[#F5F5F5] shadow-lg shadow-[#C51D34]/35 border border-[#F5F5F5]/15 transition-all active:scale-[0.98]"
+                >
+                  <svg class="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                    <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                    <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+                  </svg>
+                  <span>PAUSE</span>
+                </button>
+              `
+              : `
+                <button
+                  type="button"
+                  data-action="toggle"
+                  data-id="${athlete.id}"
+                  class="toggle-btn flex-1 py-3.5 px-4 rounded-xl font-display font-extrabold text-sm sm:text-base uppercase tracking-wider flex items-center justify-center gap-2.5 bg-[#232325] hover:bg-[#C51D34] text-[#F5F5F5] border border-[#C51D34]/80 hover:border-[#C51D34] shadow-md transition-all active:scale-[0.98] group"
+                >
+                  <svg class="w-4 h-4 fill-current text-[#C51D34] group-hover:text-[#F5F5F5] transition-colors shrink-0" viewBox="0 0 24 24">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                  <span>START</span>
+                </button>
+              `;
+
+            return `
+              <article
+                data-card-id="${athlete.id}"
+                class="athlete-card ${stateClass} rounded-2xl p-5 sm:p-6 pl-6 sm:pl-7 flex flex-col justify-between"
+              >
+                <!-- Card Top Row: Athlete Name + Status Badge + REMOVE Button -->
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex flex-wrap items-center gap-2.5 min-w-0">
+                    <h3 class="font-display font-extrabold text-base sm:text-lg tracking-wider uppercase text-[#F5F5F5] truncate">
+                      ${escapeHtml(athlete.name)}
+                    </h3>
+                    <div data-status-badge="${athlete.id}">
+                      ${statusBadgeHtml}
+                    </div>
+                  </div>
+
+                  <!-- REMOVE Button with Trash Icon (Matches Prototype) -->
+                  <button
+                    type="button"
+                    data-action="remove"
+                    data-id="${athlete.id}"
+                    title="Remove ${escapeHtml(athlete.name)}"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider text-[#808080] hover:text-[#F5F5F5] hover:bg-[#C51D34]/25 border border-transparent hover:border-[#C51D34]/50 transition-all shrink-0 active:scale-95"
+                  >
+                    <span>REMOVE</span>
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Card Middle Row: High-Precision Digital Timer Display -->
+                <div class="my-2 sm:my-3 flex items-baseline justify-between">
+                  <div
+                    data-timer-display="${athlete.id}"
+                    class="timer-digits font-extrabold text-5xl sm:text-6xl tracking-tight select-none transition-colors ${digitColorClass}"
+                  >
+                    <span data-timer-main="${athlete.id}">${parts.main}</span><span data-timer-centi="${athlete.id}" class="text-3xl sm:text-4xl ${athlete.isRunning ? 'text-[#C51D34]' : 'opacity-75'}">${parts.centi}</span>
+                  </div>
+                </div>
+
+                <!-- Card Bottom Row: 2 Main Buttons (START/PAUSE and RESET) -->
+                <div class="grid grid-cols-2 gap-3 mt-3">
+                  ${startPauseBtnHtml}
+
+                  <button
+                    type="button"
+                    data-action="reset"
+                    data-id="${athlete.id}"
+                    class="py-3.5 px-4 rounded-xl font-display font-bold text-sm sm:text-base uppercase tracking-wider flex items-center justify-center gap-2 bg-[#808080]/25 hover:bg-[#808080]/40 text-[#F5F5F5] border border-[#808080]/45 transition-all active:scale-[0.98]"
+                  >
+                    <span>RESET</span>
+                  </button>
+                </div>
+              </article>
+            `;
+          })
+          .join('');
+      }
+
+      function toggleAthleteTimer(athleteId) {
+        const now = Date.now();
+        const athlete = athletes.find((a) => a.id === athleteId);
+        if (!athlete) return;
+
+        if (athlete.isRunning) {
+          // Pause timer
+          athlete.elapsedMs = getTotalElapsedMs(athlete, now);
+          athlete.isRunning = false;
+          athlete.lastStartEpoch = null;
+          playTactileTone('pause');
+        } else {
+          // Start timer
+          athlete.isRunning = true;
+          athlete.lastStartEpoch = now;
+          playTactileTone('start');
+        }
+
+        saveState();
+        renderAthletesList();
+      }
+
+      function resetAthleteTimer(athleteId) {
+        const athlete = athletes.find((a) => a.id === athleteId);
+        if (!athlete) return;
+
+        athlete.isRunning = false;
+        athlete.elapsedMs = 0;
+        athlete.lastStartEpoch = null;
+        playTactileTone('reset');
+
+        saveState();
+        renderAthletesList();
+      }
+
+      function removeAthleteSlot(athleteId) {
+        const index = athletes.findIndex((a) => a.id === athleteId);
+        if (index === -1) return;
+
+        const removed = athletes[index];
+        lastRemovedBackup = {
+          athlete: { ...removed },
+          index: index
+        };
+
+        athletes.splice(index, 1);
+        playTactileTone('reset');
+        saveState();
+        renderAthletesList();
+        showToast(`Removed ${removed.name}`, true);
+      }
+
+      function undoRemoveAthlete() {
+        if (!lastRemovedBackup) return;
+        const { athlete, index } = lastRemovedBackup;
+        const insertIndex = Math.min(index, athletes.length);
+        athletes.splice(insertIndex, 0, athlete);
+        lastRemovedBackup = null;
+        playTactileTone('add');
+        saveState();
+        renderAthletesList();
+        hideToast();
+      }
+
+      function addNewAthlete(rawName) {
+        const cleaned = rawName.trim().replace(/\s+/g, ' ');
+        if (!cleaned) {
+          nameErrorMsg.classList.remove('hidden');
+          athleteNameInput.focus();
+          return false;
+        }
+
+        nameErrorMsg.classList.add('hidden');
+        const newAthlete = {
+          id: 'ath-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+          name: cleaned.toUpperCase(),
+          isRunning: false,
+          elapsedMs: 0,
+          lastStartEpoch: null,
+          laps: []
+        };
+
+        // Add to top of roster or bottom? Let's add to the list and scroll smoothly
+        athletes.unshift(newAthlete);
+        playTactileTone('add');
+        saveState();
+
+        // Reset filter to 'all' so the trainer immediately sees the newly created slot
+        if (currentFilter !== 'all' || searchQuery !== '') {
+          currentFilter = 'all';
+          searchQuery = '';
+          searchAthleteInput.value = '';
+          clearSearchBtn.classList.add('hidden');
+          updateFilterTabStyles();
+        }
+
+        renderAthletesList();
+        closeAddDrawer();
+        showToast(`Added timer slot for ${newAthlete.name}`, false);
+        return true;
+      }
+
+      function tickTimers() {
+        const now = Date.now();
+        let anyRunning = false;
+
+        for (let i = 0; i < athletes.length; i++) {
+          const athlete = athletes[i];
+          if (athlete.isRunning) {
+            anyRunning = true;
+            const totalMs = getTotalElapsedMs(athlete, now);
+            const parts = formatStopwatchParts(totalMs);
+
+            const mainEl = document.querySelector(`[data-timer-main="${athlete.id}"]`);
+            const centiEl = document.querySelector(`[data-timer-centi="${athlete.id}"]`);
+            if (mainEl && mainEl.textContent !== parts.main) {
+              mainEl.textContent = parts.main;
+            }
+            if (centiEl && centiEl.textContent !== parts.centi) {
+              centiEl.textContent = parts.centi;
+            }
+          }
+        }
+
+        requestAnimationFrame(tickTimers);
+      }
+
+      function openAddDrawer() {
+        nameErrorMsg.classList.add('hidden');
+        athleteNameInput.value = '';
+        addAthleteBackdrop.classList.add('open');
+        addAthleteBackdrop.setAttribute('aria-hidden', 'false');
+        setTimeout(() => {
+          athleteNameInput.focus();
+        }, 80);
+      }
+
+      function closeAddDrawer() {
+        addAthleteBackdrop.classList.remove('open');
+        addAthleteBackdrop.setAttribute('aria-hidden', 'true');
+        athleteNameInput.blur();
+      }
+
+      function updateFilterTabStyles() {
+        filterTabs.forEach((tab) => {
+          const filterVal = tab.getAttribute('data-filter');
+          if (filterVal === currentFilter) {
+            tab.className =
+              'filter-tab px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#C51D34] text-[#F5F5F5] transition-all';
+          } else {
+            tab.className =
+              'filter-tab px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-[#808080] hover:text-[#F5F5F5] transition-all';
+          }
+        });
+      }
+
+      function updateSoundButtonUI() {
+        if (soundEnabled) {
+          soundOnIcon.classList.remove('hidden');
+          soundOffIcon.classList.add('hidden');
+        } else {
+          soundOnIcon.classList.add('hidden');
+          soundOffIcon.classList.remove('hidden');
+        }
+      }
+
+      // Event Delegation for Athlete Cards (Start/Pause, Reset, Remove)
+      athletesContainer.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+
+        const action = btn.getAttribute('data-action');
+        const id = btn.getAttribute('data-id');
+        if (!id) return;
+
+        if (action === 'toggle') {
+          toggleAthleteTimer(id);
+        } else if (action === 'reset') {
+          resetAthleteTimer(id);
+        } else if (action === 'remove') {
+          removeAthleteSlot(id);
+        }
+      });
+
+      // Open / Close Drawer Listeners
+      openAddModalBtn.addEventListener('click', openAddDrawer);
+      emptyStateAddBtn.addEventListener('click', openAddDrawer);
+      closeAddModalBtn.addEventListener('click', closeAddDrawer);
+
+      addAthleteBackdrop.addEventListener('click', (e) => {
+        if (e.target === addAthleteBackdrop) {
+          closeAddDrawer();
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && addAthleteBackdrop.classList.contains('open')) {
+          closeAddDrawer();
+        }
+      });
+
+      // Submit Add Athlete Form
+      addAthleteForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        addNewAthlete(athleteNameInput.value);
+      });
+
+      athleteNameInput.addEventListener('input', () => {
+        if (athleteNameInput.value.trim()) {
+          nameErrorMsg.classList.add('hidden');
+        }
+      });
+
+      // Quick-Add Athlete Name Chips
+      document.querySelectorAll('.quick-name-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const presetName = chip.getAttribute('data-quick-name');
+          if (presetName) {
+            athleteNameInput.value = presetName;
+            nameErrorMsg.classList.add('hidden');
+            athleteNameInput.focus();
+          }
+        });
+      });
+
+      // Undo Removed Athlete
+      toastUndoBtn.addEventListener('click', undoRemoveAthlete);
+
+      // Search Input & Clear
+      searchAthleteInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        if (searchQuery.trim().length > 0) {
+          clearSearchBtn.classList.remove('hidden');
+        } else {
+          clearSearchBtn.classList.add('hidden');
+        }
+        renderAthletesList();
+      });
+
+      clearSearchBtn.addEventListener('click', () => {
+        searchQuery = '';
+        searchAthleteInput.value = '';
+        clearSearchBtn.classList.add('hidden');
+        renderAthletesList();
+      });
+
+      // Status Filter Tabs
+      filterTabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          currentFilter = tab.getAttribute('data-filter') || 'all';
+          updateFilterTabStyles();
+          renderAthletesList();
+        });
+      });
+
+      // Group Heat Controls: Start All, Pause All, Reset All
+      startAllBtn.addEventListener('click', () => {
+        if (athletes.length === 0) return;
+        const now = Date.now();
+        let startedCount = 0;
+        athletes.forEach((a) => {
+          if (!a.isRunning) {
+            a.isRunning = true;
+            a.lastStartEpoch = now;
+            startedCount++;
+          }
+        });
+        if (startedCount > 0) {
+          playTactileTone('start');
+          saveState();
+          renderAthletesList();
+          showToast(`Started ${startedCount} athlete timer${startedCount > 1 ? 's' : ''}`);
+        }
+      });
+
+      pauseAllBtn.addEventListener('click', () => {
+        if (athletes.length === 0) return;
+        const now = Date.now();
+        let pausedCount = 0;
+        athletes.forEach((a) => {
+          if (a.isRunning) {
+            a.elapsedMs = getTotalElapsedMs(a, now);
+            a.isRunning = false;
+            a.lastStartEpoch = null;
+            pausedCount++;
+          }
+        });
+        if (pausedCount > 0) {
+          playTactileTone('pause');
+          saveState();
+          renderAthletesList();
+          showToast(`Paused ${pausedCount} athlete timer${pausedCount > 1 ? 's' : ''}`);
+        }
+      });
+
+      resetAllBtn.addEventListener('click', () => {
+        if (athletes.length === 0) return;
+        athletes.forEach((a) => {
+          a.isRunning = false;
+          a.elapsedMs = 0;
+          a.lastStartEpoch = null;
+        });
+        playTactileTone('reset');
+        saveState();
+        renderAthletesList();
+        showToast('All athlete timers reset to 00:00.00');
+      });
+
+      // Layout Toggle (Grid View vs Phone Stack View)
+      layoutToggleBtn.addEventListener('click', () => {
+        compactMobileLayout = !compactMobileLayout;
+        try {
+          localStorage.setItem(LAYOUT_KEY, compactMobileLayout ? 'compact' : 'grid');
+        } catch (e) {}
+        renderAthletesList();
+      });
+
+      // Sound Toggle
+      soundToggleBtn.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        try {
+          localStorage.setItem(SOUND_KEY, String(soundEnabled));
+        } catch (e) {}
+        updateSoundButtonUI();
+        if (soundEnabled) playTactileTone('start');
+      });
+
+      // Initialize App on Load
+      window.addEventListener('DOMContentLoaded', () => {
+        loadState();
+        updateSoundButtonUI();
+        updateFilterTabStyles();
+        renderAthletesList();
+        requestAnimationFrame(tickTimers);
+      });
+    })();
+
+    // Keep screen awake on mobile/tablets while any timer is running
+      let wakeLock = null;
+      async function syncWakeLock() {
+        if (!('wakeLock' in navigator)) return;
+        const anyRunning = athletes.some((a) => a.isRunning);
+        try {
+          if (anyRunning && !wakeLock) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => { wakeLock = null; });
+          } else if (!anyRunning && wakeLock) {
+            await wakeLock.release();
+            wakeLock = null;
+          }
+        } catch (err) {}
+      }
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          renderAthletesList();
+          syncWakeLock();
+        }
+      });
+      document.addEventListener('click', syncWakeLock);
+  </script>
+</body>
+</html>
